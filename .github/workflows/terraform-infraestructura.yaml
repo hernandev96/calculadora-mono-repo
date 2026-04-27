@@ -1,5 +1,6 @@
-name: Terraform Infraestructura
+name: Terraform Infraestructura (Despliegue)
 
+# Trigger que se ejecuta en push a main, branches de feature y fix, y cambios en infra/terraform
 on:
   push:
     branches: [main, "feature/**", "fix/"]
@@ -7,41 +8,53 @@ on:
   pull_request:
     branches: [main, "feature/**", "fix/"]
     paths: ["infra/terraform"]
-
+# Permisos necesarios para la autenticación con AWS y el despliegue
 permissions:
   id-token: write
   contents: read
-
+# Ejecuta los pasos de Terraform para planificar y aplicar cambios
 jobs:
+  # Ejecuta los pasos de Terraform para planificar y aplicar cambios
   terraform:
     runs-on: ubuntu-latest
+    # Ejecuta los pasos de Terraform para planificar y aplicar cambios
     steps:
+      # Clona el repositorio para acceder a los archivos de Terraform
       - name: Clonar repositorio
         uses: actions/checkout@v3
+      # Configura las credenciales de AWS para autenticación con OIDC
       - name: Configurar credenciales de AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: us-east-1
+      # Verifica la identidad de AWS para confirmar la autenticación
       - name: Verificar identidad (Test)
         run: |
           aws sts get-caller-identity
           echo "✅ Autenticación exitosa con OIDC"
+      # Inicializa Terraform y planifica los cambios
       - uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.0
+      # Inicializa Terraform y planifica los cambios
       - name: Iniciar Terraform
         run: terraform init
         working-directory: infra/terraform
+      # Planifica los cambios de Terraform
       - name: Planificar Terraform
         run: terraform plan
         working-directory: infra/terraform
+      # Aplica los cambios planificados de Terraform
       - name: Aplicar Terraform
         run: terraform apply
         working-directory: infra/terraform
         if: ${{ github.event_name == 'push' }}
+
+      # Dorme durante 300 segundos para permitir que los cambios se apliquen
       - name: dormir
         run: sleep 300s
+      # Destruye la infraestructura aplicada por Terraform
       - name: destruir infraestructura
         run: terraform destroy
         working-directory: infra/terraform

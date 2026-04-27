@@ -1,6 +1,6 @@
 # Infrastructura para desplegar calculadora en aws
 #
-# Se configura el proveedor de aws y tls para la infraestructura.
+# Se configura el proveedor de aws
 # Infraestrutura a crear
 # VPC con CIDR /16 (ej: 10.0.0.0/16)
 # 2+ subnets públicas y 2+ subnets privadas
@@ -11,6 +11,7 @@
 # Managed node group (t3.medium como mínimo para dev, t3.large para staging/prod)
 # S3 bucket + DynamoDB table para Terraform remote state y locking
 
+# Se configura Terraform para usar el proveedor de aws
 terraform {
   required_providers {
     aws = {
@@ -22,11 +23,12 @@ terraform {
   required_version = ">= 1.2"
 }
 
-# Configuración del proveedor de aws.
+# Configuración del proveedor de aws con la region a usar.
 provider "aws" {
   region = var.region
 }
 
+# se crea la VPC para la calculadora
 module "vpc" {
   source = "./modules/VPC"
 
@@ -39,11 +41,13 @@ module "vpc" {
   private_subnet_count = 2
 }
 
+# se crea el repositorio ECR para el frontend
 module "ecr_frontend" {
   source   = "./modules/ECR"
   ecr_name = "calculadora-frontend"
 }
 
+# se crea el repositorio ECR para el backend
 module "ecr_backend" {
   source   = "./modules/ECR"
   ecr_name = "calculadora-backend"
@@ -51,11 +55,13 @@ module "ecr_backend" {
 
 # -----------------------------
 # Recursos para Terraform remote state (S3 + DynamoDB)
+# Se utilizan para almacenar el estado de Terraform y evitar conflictos en la infraestructura.
 # -----------------------------
 
 # Información de la cuenta para nombres únicos
 data "aws_caller_identity" "current" {}
 
+# se crea el bucket S3 para almacenar el estado de Terraform
 resource "aws_s3_bucket" "tfstate" {
   bucket = "calculadora-terraform-state-${data.aws_caller_identity.current.account_id}-${var.region}"
   acl    = "private"
@@ -77,7 +83,7 @@ resource "aws_s3_bucket" "tfstate" {
     Env  = "infra"
   }
 }
-
+# se configura el bloqueo de acceso público para el bucket S3
 resource "aws_s3_bucket_public_access_block" "tfstate_block" {
   bucket                  = aws_s3_bucket.tfstate.id
   block_public_acls       = true
@@ -86,6 +92,7 @@ resource "aws_s3_bucket_public_access_block" "tfstate_block" {
   restrict_public_buckets = true
 }
 
+# se crea la tabla DynamoDB para almacenar los bloqueos de Terraform
 resource "aws_dynamodb_table" "terraform_locks" {
   name         = "calculadora-terraform-locks-${var.region}-${data.aws_caller_identity.current.account_id}"
   billing_mode = "PAY_PER_REQUEST"
@@ -104,6 +111,7 @@ resource "aws_dynamodb_table" "terraform_locks" {
 
 # -----------------------------
 # IAM Roles y policies para EKS
+# se crean los roles y policies necesarios para EKS
 # -----------------------------
 
 # IAM role para el control plane de EKS
@@ -127,12 +135,12 @@ resource "aws_iam_role" "eks_cluster_role" {
     Name = "calculadora-eks-cluster-role"
   }
 }
-
+# se adjunta la política AmazonEKSClusterPolicy al rol de EKS
 resource "aws_iam_role_policy_attachment" "eks_cluster_AmazonEKSClusterPolicy" {
   role       = aws_iam_role.eks_cluster_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
 }
-
+# se adjunta la política AmazonEKSServicePolicy al rol de EKS
 resource "aws_iam_role_policy_attachment" "eks_cluster_AmazonEKSServicePolicy" {
   role       = aws_iam_role.eks_cluster_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSServicePolicy"
@@ -165,17 +173,17 @@ resource "aws_iam_role" "eks_node_role" {
     Name = "calculadora-eks-node-role"
   }
 }
-
+# se adjunta la política AmazonEKSWorkerNodePolicy al rol de EKS
 resource "aws_iam_role_policy_attachment" "eks_node_AmazonEKSWorkerNodePolicy" {
   role       = aws_iam_role.eks_node_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
 }
-
+# se adjunta la política AmazonEKS_CNI_Policy al rol de EKS
 resource "aws_iam_role_policy_attachment" "eks_node_AmazonEKS_CNI_Policy" {
   role       = aws_iam_role.eks_node_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
 }
-
+# se adjunta la política AmazonEC2ContainerRegistryReadOnly al rol de EKS
 resource "aws_iam_role_policy_attachment" "eks_node_AmazonEC2ContainerRegistryReadOnly" {
   role       = aws_iam_role.eks_node_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
@@ -183,9 +191,11 @@ resource "aws_iam_role_policy_attachment" "eks_node_AmazonEC2ContainerRegistryRe
 
 # -----------------------------
 # EKS Cluster y Managed Node Group
+# se crea el clúster EKS y el Managed Node Group
 # -----------------------------
 
 # Clúster EKS
+# se crea el clúster EKS con la configuración especificada
 resource "aws_eks_cluster" "calculadora" {
   name     = "calculadora-eks-${data.aws_caller_identity.current.account_id}"
   version  = "1.35.4"
@@ -212,6 +222,7 @@ resource "aws_eks_cluster" "calculadora" {
 }
 
 # Managed Node Group
+# se crea el Managed Node Group con la configuración especificada
 resource "aws_eks_node_group" "calculadora_nodes" {
   cluster_name    = aws_eks_cluster.calculadora.name
   node_group_name = "calculadora-managed-ng"
@@ -250,41 +261,42 @@ resource "aws_eks_node_group" "calculadora_nodes" {
 
 # -----------------------------
 # Outputs
+# Para mostrar información de la infraestructura
 # -----------------------------
-
+# ID de la VPC
 output "vpc_id" {
   value = module.vpc.vpc_id
 }
-
+# IDs de las subredes públicas
 output "public_subnets" {
   value = module.vpc.public_subnet_ids
 }
-
-
+# IDs de las subredes privadas
 output "private_subnets" {
   value = module.vpc.private_subnet_ids
 }
-
+# nombre del cluster EKS
 output "eks_cluster_name" {
   value = aws_eks_cluster.calculadora.name
 }
-
+# endpoint del cluster EKS
 output "eks_cluster_endpoint" {
   value = aws_eks_cluster.calculadora.endpoint
 }
 
+# ARN del cluster EKS
 output "eks_cluster_arn" {
   value = aws_eks_cluster.calculadora.arn
 }
-
+# nombre del grupo de nodos EKS
 output "eks_node_group_name" {
   value = aws_eks_node_group.calculadora_nodes.node_group_name
 }
-
+# nombre del bucket de estado de Terraform
 output "terraform_state_bucket" {
   value = aws_s3_bucket.tfstate.id
 }
-
+# nombre de la tabla de bloqueos de Terraform
 output "terraform_locks_table" {
   value = aws_dynamodb_table.terraform_locks.name
 }

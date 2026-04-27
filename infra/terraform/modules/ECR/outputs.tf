@@ -1,3 +1,4 @@
+# Outputs del módulo ECR
 output "repository_name" {
   description = "Nombre del repositorio ECR"
   value       = aws_ecr_repository.ecr.name
