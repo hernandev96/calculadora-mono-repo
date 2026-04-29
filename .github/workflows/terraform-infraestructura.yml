@@ -3,11 +3,11 @@ name: Terraform Infraestructura (Despliegue)
 # Trigger que se ejecuta en push a main, branches de feature y fix, y cambios en infra/terraform
 on:
   push:
-    branches: [main, "feature/**", "fix/"]
-    paths: ["infra/terraform"]
+    branches: [main, "feature/**", "fix/**"]
+    paths: ["infra/terraform/**"]
   pull_request:
-    branches: [main, "feature/**", "fix/"]
-    paths: ["infra/terraform"]
+    branches: [main, "feature/**", "fix/**"]
+    paths: ["infra/terraform/**"]
 # Permisos necesarios para la autenticación con AWS y el despliegue
 permissions:
   id-token: write
@@ -47,7 +47,7 @@ jobs:
         working-directory: infra/terraform
       # Aplica los cambios planificados de Terraform
       - name: Aplicar Terraform
-        run: terraform apply
+        run: terraform apply -auto-approve
         working-directory: infra/terraform
         if: ${{ github.event_name == 'push' }}
 
@@ -56,6 +56,6 @@ jobs:
         run: sleep 300s
       # Destruye la infraestructura aplicada por Terraform
       - name: destruir infraestructura
-        run: terraform destroy
+        run: terraform destroy -auto-approve
         working-directory: infra/terraform
         if: ${{ github.event_name == 'push' }}

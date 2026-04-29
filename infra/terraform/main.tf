@@ -18,7 +18,7 @@
 #  2) Descomentar (o añadir) el bloque `backend "s3"` de más abajo (líneas marcadas)
 #     y ejecutar `terraform init -reconfigure` para migrar el estado al S3/DynamoDB.
 #
-# Si prefiere, se puede crear el bucket S3 y la tabla DynamoDB manualmente antes
+# Se puede crear el bucket S3 y la tabla DynamoDB manualmente antes
 # y dejar el backend "s3" activo desde el inicio.
 ###############################################################################
 
