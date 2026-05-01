@@ -1,49 +1,49 @@
 output "vpc_id" {
-  description = "ID de la VPC"
+  description = "VPC id"
   value       = aws_vpc.this.id
 }
 
 output "public_subnet_ids" {
-  description = "IDs de las subredes públicas"
+  description = "Public subnet ids"
   value       = aws_subnet.public[*].id
 }
 
 output "private_subnet_ids" {
-  description = "IDs de las subredes privadas"
+  description = "Private subnet ids"
   value       = aws_subnet.private[*].id
 }
 
 output "igw_id" {
-  description = "ID del Internet Gateway"
+  description = "Internet Gateway id"
   value       = aws_internet_gateway.this.id
 }
 
 output "nat_gateway_ids" {
-  description = "IDs de los NAT Gateways"
+  description = "NAT Gateway ids"
   value       = aws_nat_gateway.this[*].id
 }
 
 output "public_route_table_id" {
-  description = "ID de la tabla de rutas pública"
+  description = "Public route table id"
   value       = aws_route_table.public.id
 }
 
 output "private_route_table_ids" {
-  description = "IDs de las tablas de rutas privadas"
+  description = "Private route table ids"
   value       = aws_route_table.private[*].id
 }
 
 output "security_group_nodes_id" {
-  description = "ID del SG para los nodos"
+  description = "SG id for nodes"
   value       = aws_security_group.nodes.id
 }
 
 output "security_group_alb_id" {
-  description = "ID del SG para el ALB"
+  description = "SG id for ALB"
   value       = aws_security_group.alb.id
 }
 
 output "security_group_internal_id" {
-  description = "ID del SG para la comunicación interna"
+  description = "SG id for internal communication"
   value       = aws_security_group.internal.id
 }

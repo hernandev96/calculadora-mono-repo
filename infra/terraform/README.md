@@ -6,7 +6,7 @@ Resumen rápido
 - VPC con 2 subnets públicas + 2 privadas, IGW, NAT Gateways y tablas de ruteo.
 - Security Groups para nodos, ALB y comunicación interna.
 - ECR: repositorios para frontend y backend.
-- EKS: clúster EKS (v1.29) y Managed Node Group.
+- EKS: clúster EKS (v1.35.x) y Managed Node Group.
 - ALB: Application Load Balancer creado dentro del módulo VPC (listener + target group).
 - S3 + DynamoDB: bucket y tabla para estado remoto y locking (creados por Terraform).
 - IAM: roles y attachments necesarios para EKS y nodos.

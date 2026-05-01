@@ -1,7 +1,7 @@
-// VPC module: creates VPC, public/private subnets, IGW, NAT Gateways, route tables and SGs
-# se obtienen las zonas de disponibilidad disponibles
+# VPC module: creates VPC, public/private subnets, IGW, NAT Gateways, route tables and SGs
+
 data "aws_availability_zones" "available" {}
-# se crea la VPC con los parámetros especificados
+
 resource "aws_vpc" "this" {
   cidr_block           = var.vpc_cidr
   enable_dns_support   = true
@@ -11,7 +11,7 @@ resource "aws_vpc" "this" {
     Name = "${var.name}-vpc"
   }
 }
-# se crea el Internet Gateway para la VPC
+
 resource "aws_internet_gateway" "this" {
   vpc_id = aws_vpc.this.id
 
@@ -19,7 +19,7 @@ resource "aws_internet_gateway" "this" {
     Name = "${var.name}-igw"
   }
 }
-# se crean las subredes públicas y privadas
+
 resource "aws_subnet" "public" {
   count                   = var.public_subnet_count
   vpc_id                  = aws_vpc.this.id
@@ -32,16 +32,15 @@ resource "aws_subnet" "public" {
     Tier = "public"
   }
 }
-# se crean las direcciones IP públicas para los NAT Gateways
+
 resource "aws_eip" "nat" {
   count = var.public_subnet_count
-
 
   tags = {
     Name = "${var.name}-nat-eip-${count.index}"
   }
 }
-# se crean los NAT Gateways para la VPC
+
 resource "aws_nat_gateway" "this" {
   count         = var.public_subnet_count
   allocation_id = aws_eip.nat[count.index].id
@@ -51,7 +50,7 @@ resource "aws_nat_gateway" "this" {
     Name = "${var.name}-nat-${count.index}"
   }
 }
-# se crean las subredes privadas
+
 resource "aws_subnet" "private" {
   count             = var.private_subnet_count
   vpc_id            = aws_vpc.this.id
@@ -63,7 +62,7 @@ resource "aws_subnet" "private" {
     Tier = "private"
   }
 }
-# se crean las tablas de rutas públicas y privadas
+
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.this.id
 
@@ -71,19 +70,19 @@ resource "aws_route_table" "public" {
     Name = "${var.name}-public-rt"
   }
 }
-# se crean las rutas para acceder a Internet a través del NAT Gateway
+
 resource "aws_route" "public_internet_access" {
   route_table_id         = aws_route_table.public.id
   destination_cidr_block = "0.0.0.0/0"
   gateway_id             = aws_internet_gateway.this.id
 }
-# se asocian las tablas de rutas públicas con las subredes públicas
+
 resource "aws_route_table_association" "public" {
   count          = var.public_subnet_count
   subnet_id      = aws_subnet.public[count.index].id
   route_table_id = aws_route_table.public.id
 }
-# se crean las tablas de rutas privadas
+
 resource "aws_route_table" "private" {
   count  = var.private_subnet_count
   vpc_id = aws_vpc.this.id
@@ -92,14 +91,14 @@ resource "aws_route_table" "private" {
     Name = "${var.name}-private-rt-${count.index}"
   }
 }
-# se crean las rutas para acceder a Internet a través del NAT Gateway
+
 resource "aws_route" "private_nat" {
   count                  = var.private_subnet_count
   route_table_id         = aws_route_table.private[count.index].id
   destination_cidr_block = "0.0.0.0/0"
   nat_gateway_id         = aws_nat_gateway.this[count.index].id
 }
-# se asocian las tablas de rutas privadas con las subredes privadas
+
 resource "aws_route_table_association" "private" {
   count          = var.private_subnet_count
   subnet_id      = aws_subnet.private[count.index].id
@@ -107,7 +106,6 @@ resource "aws_route_table_association" "private" {
 }
 
 # Security groups
-# se crean los grupos de seguridad para los nodos del cluster
 resource "aws_security_group" "nodes" {
   name        = "${var.name}-nodes-sg"
   description = "Security group for cluster nodes"
@@ -130,7 +128,7 @@ resource "aws_security_group" "nodes" {
 
   tags = { Name = "${var.name}-nodes" }
 }
-# se crean los grupos de seguridad para el ALB
+
 resource "aws_security_group" "alb" {
   name        = "${var.name}-alb-sg"
   description = "Security group for ALB"
@@ -161,13 +159,12 @@ resource "aws_security_group" "alb" {
 
   tags = { Name = "${var.name}-alb" }
 }
-# se crean los grupos de seguridad para los servicios internos
+
 resource "aws_security_group" "internal" {
   name        = "${var.name}-internal-sg"
   description = "Security group for internal services"
   vpc_id      = aws_vpc.this.id
 
-  # allow all traffic from nodes and alb and VPC
   ingress {
     from_port       = 0
     to_port         = 0
@@ -196,7 +193,6 @@ resource "aws_security_group" "internal" {
 # Application Load Balancer (ALB) en subnets públicas
 # -----------------------------
 
-# se crea el ALB en las subredes públicas
 resource "aws_lb" "alb" {
   name               = "${var.name}-alb"
   internal           = false
@@ -211,7 +207,6 @@ resource "aws_lb" "alb" {
   }
 }
 
-# se crea el target group para el ALB
 resource "aws_lb_target_group" "app_tg" {
   name     = "${var.name}-tg"
   port     = 80
@@ -234,7 +229,6 @@ resource "aws_lb_target_group" "app_tg" {
   }
 }
 
-# se crea el listener para el ALB
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.alb.arn
   port              = "80"

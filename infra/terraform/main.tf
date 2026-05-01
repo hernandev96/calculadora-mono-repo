@@ -30,7 +30,6 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.92"
     }
-
   }
 
   # Requerimos una versión mínima de Terraform
@@ -75,20 +74,16 @@ provider "aws" {
 module "vpc" {
   source = "./modules/VPC"
 
-  # Prefijo de nombres para recursos generados por el módulo
   name = "calculadora"
 
-  # CIDR de la VPC
   vpc_cidr = "10.0.0.0/16"
 
-  # Número de AZs/subnets públicas/privadas a crear
   az_count             = 2
   public_subnet_count  = 2
   private_subnet_count = 2
 }
 
 # -- Módulos ECR (frontend y backend) --------------------------------------
-# Cada módulo ECR crea un repositorio ECR para alojar imágenes docker.
 module "ecr_frontend" {
   source   = "./modules/ECR"
   ecr_name = "calculadora-frontend"
@@ -102,18 +97,9 @@ module "ecr_backend" {
 # -----------------------------
 # Recursos para Terraform remote state (S3 + DynamoDB)
 # -----------------------------
-# Estos recursos se crean para almacenar el estado remoto y habilitar locking.
-# Sigue la nota al inicio del archivo sobre la migración a backend S3.
-# -----------------------------
 
-# Información de la cuenta actual (usada para nombres únicos)
 data "aws_caller_identity" "current" {}
 
-# Bucket S3 para almacenar el estado de Terraform.
-# - `bucket`: nombre único (se construye con account_id + región).
-# - `acl`: privado, sólo accesible desde la cuenta (y políticas IAM).
-# - `versioning`: recomendado para permitir recuperación del estado anterior.
-# - `server_side_encryption_configuration`: cifrado SSE-S3 (AES256).
 resource "aws_s3_bucket" "tfstate" {
   bucket = "calculadora-terraform-state-${data.aws_caller_identity.current.account_id}-${var.region}"
   acl    = "private"
@@ -136,7 +122,6 @@ resource "aws_s3_bucket" "tfstate" {
   }
 }
 
-# Bloqueo de accesos públicos al bucket (mejora de seguridad)
 resource "aws_s3_bucket_public_access_block" "tfstate_block" {
   bucket                  = aws_s3_bucket.tfstate.id
   block_public_acls       = true
@@ -145,8 +130,6 @@ resource "aws_s3_bucket_public_access_block" "tfstate_block" {
   restrict_public_buckets = true
 }
 
-# Tabla DynamoDB para el locking de Terraform.
-# - Se usa `LockID` como hash key y `PAY_PER_REQUEST` para evitar aprovisionar capacidad.
 resource "aws_dynamodb_table" "terraform_locks" {
   name         = "calculadora-terraform-locks-${var.region}-${data.aws_caller_identity.current.account_id}"
   billing_mode = "PAY_PER_REQUEST"
@@ -166,14 +149,7 @@ resource "aws_dynamodb_table" "terraform_locks" {
 # -----------------------------
 # IAM Roles y attachments para EKS
 # -----------------------------
-# Se crean roles IAM para:
-# - control plane de EKS (eks.amazonaws.com)
-# - nodos (ec2.amazonaws.com)
-# Luego se adjuntan las políticas administradas necesarias.
-# -----------------------------
 
-# Role para el control plane de EKS.
-# - El assume_role_policy permite que el servicio `eks.amazonaws.com` asuma el rol.
 resource "aws_iam_role" "eks_cluster_role" {
   name = "calculadora-eks-cluster-role-${data.aws_caller_identity.current.account_id}"
 
@@ -195,23 +171,21 @@ resource "aws_iam_role" "eks_cluster_role" {
   }
 }
 
-# Attach: permisos necesarios para que EKS gestione recursos de cluster.
 resource "aws_iam_role_policy_attachment" "eks_cluster_AmazonEKSClusterPolicy" {
   role       = aws_iam_role.eks_cluster_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
 }
+
 resource "aws_iam_role_policy_attachment" "eks_cluster_AmazonEKSServicePolicy" {
   role       = aws_iam_role.eks_cluster_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSServicePolicy"
 }
 
-# (Opcional pero recomendado) Permite al EKS VPC Resource Controller gestionar ENIs, etc.
 resource "aws_iam_role_policy_attachment" "eks_cluster_AmazonEKSVPCResourceController" {
   role       = aws_iam_role.eks_cluster_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSVPCResourceController"
 }
 
-# Role para los nodos del node group (EC2)
 resource "aws_iam_role" "eks_node_role" {
   name = "calculadora-eks-node-role-${data.aws_caller_identity.current.account_id}"
 
@@ -233,15 +207,16 @@ resource "aws_iam_role" "eks_node_role" {
   }
 }
 
-# Políticas necesarias para que los nodos funcionen correctamente en EKS:
 resource "aws_iam_role_policy_attachment" "eks_node_AmazonEKSWorkerNodePolicy" {
   role       = aws_iam_role.eks_node_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
 }
+
 resource "aws_iam_role_policy_attachment" "eks_node_AmazonEKS_CNI_Policy" {
   role       = aws_iam_role.eks_node_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
 }
+
 resource "aws_iam_role_policy_attachment" "eks_node_AmazonEC2ContainerRegistryReadOnly" {
   role       = aws_iam_role.eks_node_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
@@ -250,39 +225,18 @@ resource "aws_iam_role_policy_attachment" "eks_node_AmazonEC2ContainerRegistryRe
 # -----------------------------
 # EKS Cluster y Managed Node Group
 # -----------------------------
-# Comentarios:
-# - `aws_eks_cluster` crea el control plane (API server, etcd gestionado por AWS).
-# - `vpc_config` debe apuntar a subnets privadas/publicas según diseño.
-# - `aws_eks_node_group` crea nodos gestionados por AWS (ASG administrado por EKS).
-# - Ajusta `instance_types`, `disk_size`, `scaling_config` por entorno.
-# -----------------------------
 
 resource "aws_eks_cluster" "calculadora" {
-  # Nombre del clúster (añadimos account_id por unicidad)
-  name = "calculadora-eks-${data.aws_caller_identity.current.account_id}"
-
-  # Versión de Kubernetes/EKS soportada por el proveedor (ajustar según soporte AWS)
-  version = "1.35"
-
-  # Rol IAM que EKS usará para el control plane
+  name     = "calculadora-eks-${data.aws_caller_identity.current.account_id}"
+  version  = "1.35.4"
   role_arn = aws_iam_role.eks_cluster_role.arn
 
-
-  # Configuración de red del cluster
   vpc_config {
-    # Subnets donde correrá el plano y nodos. Aquí usamos las privadas + públicas
-    # para permitir nodos y endpoints según la configuración del módulo VPC.
-    subnet_ids = concat(module.vpc.private_subnet_ids, module.vpc.public_subnet_ids)
-
-    # Security groups que el control plane usará para acceder a recursos dentro de la VPC.
-    security_group_ids = [module.vpc.security_group_internal_id]
-
-    # Habilitar acceso privado y público al endpoint del API server:
+    subnet_ids              = concat(module.vpc.private_subnet_ids, module.vpc.public_subnet_ids)
+    security_group_ids      = [module.vpc.security_group_internal_id]
     endpoint_private_access = true
     endpoint_public_access  = true
-
-    # CIDRs permitidos para acceso público (ejemplo: 0.0.0.0/0 -> abierto; filtrarlo en prod)
-    public_access_cidrs = ["0.0.0.0/0"]
+    public_access_cidrs     = ["0.0.0.0/0"]
   }
 
   tags = {
@@ -290,7 +244,6 @@ resource "aws_eks_cluster" "calculadora" {
     Env  = "infra"
   }
 
-  # Garantizar que las políticas del rol existen antes de crear el cluster
   depends_on = [
     aws_iam_role_policy_attachment.eks_cluster_AmazonEKSClusterPolicy,
     aws_iam_role_policy_attachment.eks_cluster_AmazonEKSServicePolicy
@@ -298,31 +251,21 @@ resource "aws_eks_cluster" "calculadora" {
 }
 
 resource "aws_eks_node_group" "calculadora_nodes" {
-  # Asociado al cluster creado arriba
   cluster_name    = aws_eks_cluster.calculadora.name
   node_group_name = "calculadora-managed-ng"
   node_role_arn   = aws_iam_role.eks_node_role.arn
+  subnet_ids      = module.vpc.private_subnet_ids
 
-  # Subnets donde se lanzarán las instancias del node group (preferible privadas)
-  subnet_ids = module.vpc.private_subnet_ids
-
-  # Auto scaling del grupo de nodos
   scaling_config {
     desired_size = 2
     max_size     = 3
     min_size     = 1
   }
 
-  # Tipos de instancia para los nodos (ajustar por entorno)
   instance_types = ["t3.medium"]
+  ami_type       = "AL2_x86_64"
+  disk_size      = 20
 
-  # Tipo de AMI: Amazon Linux 2 x86_64 (compatible con EKS estándar)
-  ami_type = "AL2_x86_64"
-
-  # Tamaño del disco (GiB) asociado al nodo
-  disk_size = 20
-
-  # Remote access: si no se especifica key_name se puede usar SSM/Session Manager
   remote_access {
     # key_name = null
   }
@@ -332,7 +275,6 @@ resource "aws_eks_node_group" "calculadora_nodes" {
     Env  = "infra"
   }
 
-  # Asegurarse de que las políticas de nodos estén listas y que el cluster exista
   depends_on = [
     aws_iam_role_policy_attachment.eks_node_AmazonEKSWorkerNodePolicy,
     aws_iam_role_policy_attachment.eks_node_AmazonEKS_CNI_Policy,
@@ -344,65 +286,52 @@ resource "aws_eks_node_group" "calculadora_nodes" {
 # -----------------------------
 # Outputs (información útil tras el apply)
 # -----------------------------
-# Proveer información que otros módulos / pipelines pueden consumir.
 
-# ID de la VPC creada por el módulo VPC.
 output "vpc_id" {
   description = "ID de la VPC creada"
   value       = module.vpc.vpc_id
 }
 
-# Subnets públicas (IDs)
 output "public_subnets" {
   description = "IDs de subnets públicas"
   value       = module.vpc.public_subnet_ids
 }
 
-# Subnets privadas (IDs)
 output "private_subnets" {
   description = "IDs de subnets privadas"
   value       = module.vpc.private_subnet_ids
 }
 
-# Nombre del clúster EKS (útil para kubeconfig y pipelines)
 output "eks_cluster_name" {
   description = "Nombre del cluster EKS"
   value       = aws_eks_cluster.calculadora.name
 }
 
-# Endpoint público del API server de EKS
 output "eks_cluster_endpoint" {
   description = "Endpoint del cluster EKS"
   value       = aws_eks_cluster.calculadora.endpoint
 }
 
-# ARN del cluster EKS
 output "eks_cluster_arn" {
   description = "ARN del cluster EKS"
   value       = aws_eks_cluster.calculadora.arn
 }
 
-# Nombre del node group (útil para auditoría)
 output "eks_node_group_name" {
   description = "Nombre del Node Group gestionado"
   value       = aws_eks_node_group.calculadora_nodes.node_group_name
 }
 
-# Bucket de estado de Terraform (si se creó)
 output "terraform_state_bucket" {
   description = "Nombre del bucket S3 usado para Terraform state"
   value       = aws_s3_bucket.tfstate.id
 }
 
-# Tabla DynamoDB para locking
 output "terraform_locks_table" {
   description = "Nombre de la tabla DynamoDB usada para locking"
   value       = aws_dynamodb_table.terraform_locks.name
 }
 
-# Información del ALB expuesto por el módulo VPC (si el módulo lo crea/exposa)
-# - El módulo VPC debe exportar estos outputs para que estén disponibles aquí.
-# - Comprueba `modules/VPC/outputs.tf` para confirmar nombres exactos.
 output "alb_dns_name" {
   description = "DNS name del Application Load Balancer (ALB) creado en el módulo VPC"
   value       = try(module.vpc.alb_dns_name, "")

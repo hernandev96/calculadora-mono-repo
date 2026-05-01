@@ -86,3 +86,4 @@ function checkHealth() {
 }
 
 checkHealth();
+// trigger CI

@@ -1,4 +1,3 @@
-
 # Variables del módulo ECR
 variable "ecr_name" {
   type        = string

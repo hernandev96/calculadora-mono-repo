@@ -20,8 +20,19 @@ jobs:
 
       - name: Test container starts
         run: |
-          docker run -d --name fe-test -e BACKEND_HOST=localhost frontend-test
-          sleep 3
-          docker exec fe-test wget -q --spider http://localhost/ || exit 1
-          echo "Frontend container OK"
+          docker run -d --name fe-test \
+            -e BACKEND_HOST=127.0.0.1 \
+            frontend-test
+          for i in 1 2 3 4 5; do
+            if docker exec fe-test wget -q --spider http://127.0.0.1/ 2>/dev/null; then
+              echo "Frontend container OK"
+              docker stop fe-test
+              exit 0
+            fi
+            echo "Waiting for Nginx... attempt $i"
+            sleep 2
+          done
+          echo "Frontend failed to start:"
+          docker logs fe-test
           docker stop fe-test
+          exit 1

@@ -1,0 +1,71 @@
+name: Build and Push to ECR
+ 
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+ 
+permissions:
+  id-token: write
+  contents: read
+ 
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  ECR_REGISTRY: ${{ vars.ECR_REGISTRY }}
+ 
+jobs:
+  build-and-push-backend:
+    name: Build & Push Backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+ 
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+ 
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+ 
+      - name: Build, tag, and push backend image
+        working-directory: backend
+        run: |
+          SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          docker build -t $ECR_REGISTRY/calculadora-backend:$SHA \
+                       -t $ECR_REGISTRY/calculadora-backend:latest .
+          docker push $ECR_REGISTRY/calculadora-backend:$SHA
+          docker push $ECR_REGISTRY/calculadora-backend:latest
+          echo "Pushed backend:$SHA"
+ 
+  build-and-push-frontend:
+    name: Build & Push Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+ 
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+ 
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+ 
+      - name: Build, tag, and push frontend image
+        working-directory: frontend
+        run: |
+          SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          docker build -t $ECR_REGISTRY/calculadora-frontend:$SHA \
+                       -t $ECR_REGISTRY/calculadora-frontend:latest .
+          docker push $ECR_REGISTRY/calculadora-frontend:$SHA
+          docker push $ECR_REGISTRY/calculadora-frontend:latest
+          echo "Pushed frontend:$SHA"
