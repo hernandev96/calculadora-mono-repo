@@ -51,6 +51,93 @@ jobs:
         working-directory: infra/terraform
         if: ${{ github.event_name == 'push' }}
 
+      # Extraer outputs de Terraform y exponerlos como salidas del step
+      - name: Exportar outputs de Terraform
+        id: tf_outputs
+        run: |
+          cd infra/terraform
+          terraform output -json > tf_outputs.json
+          # String outputs
+          echo "vpc_id=$(jq -r '.vpc_id.value // ""' tf_outputs.json)" >> $GITHUB_OUTPUT
+          echo "eks_cluster_name=$(jq -r '.eks_cluster_name.value // ""' tf_outputs.json)" >> $GITHUB_OUTPUT
+          echo "eks_cluster_endpoint=$(jq -r '.eks_cluster_endpoint.value // ""' tf_outputs.json)" >> $GITHUB_OUTPUT
+          echo "eks_cluster_arn=$(jq -r '.eks_cluster_arn.value // ""' tf_outputs.json)" >> $GITHUB_OUTPUT
+          echo "eks_node_group_name=$(jq -r '.eks_node_group_name.value // ""' tf_outputs.json)" >> $GITHUB_OUTPUT
+          echo "terraform_state_bucket=$(jq -r '.terraform_state_bucket.value // ""' tf_outputs.json)" >> $GITHUB_OUTPUT
+          echo "terraform_locks_table=$(jq -r '.terraform_locks_table.value // ""' tf_outputs.json)" >> $GITHUB_OUTPUT
+          echo "alb_dns_name=$(jq -r '.alb_dns_name.value // ""' tf_outputs.json)" >> $GITHUB_OUTPUT
+          echo "alb_arn=$(jq -r '.alb_arn.value // ""' tf_outputs.json)" >> $GITHUB_OUTPUT
+          # Array outputs (join with comma)
+          echo "public_subnets=$(jq -r '.public_subnets.value | join(",") // ""' tf_outputs.json)" >> $GITHUB_OUTPUT
+          echo "private_subnets=$(jq -r '.private_subnets.value | join(",") // ""' tf_outputs.json)" >> $GITHUB_OUTPUT
+
+      # Guardar outputs de Terraform como secretos en el repositorio
+      - name: Establecer secreto TF_VPC_ID
+        uses: peter-evans/create-or-update-secret@v2
+        with:
+          secret_name: TF_VPC_ID
+          secret_value: ${{ steps.tf_outputs.outputs.vpc_id }}
+
+      - name: Establecer secreto TF_PUBLIC_SUBNETS
+        uses: peter-evans/create-or-update-secret@v2
+        with:
+          secret_name: TF_PUBLIC_SUBNETS
+          secret_value: ${{ steps.tf_outputs.outputs.public_subnets }}
+
+      - name: Establecer secreto TF_PRIVATE_SUBNETS
+        uses: peter-evans/create-or-update-secret@v2
+        with:
+          secret_name: TF_PRIVATE_SUBNETS
+          secret_value: ${{ steps.tf_outputs.outputs.private_subnets }}
+
+      - name: Establecer secreto TF_EKS_CLUSTER_NAME
+        uses: peter-evans/create-or-update-secret@v2
+        with:
+          secret_name: TF_EKS_CLUSTER_NAME
+          secret_value: ${{ steps.tf_outputs.outputs.eks_cluster_name }}
+
+      - name: Establecer secreto TF_EKS_CLUSTER_ENDPOINT
+        uses: peter-evans/create-or-update-secret@v2
+        with:
+          secret_name: TF_EKS_CLUSTER_ENDPOINT
+          secret_value: ${{ steps.tf_outputs.outputs.eks_cluster_endpoint }}
+
+      - name: Establecer secreto TF_EKS_CLUSTER_ARN
+        uses: peter-evans/create-or-update-secret@v2
+        with:
+          secret_name: TF_EKS_CLUSTER_ARN
+          secret_value: ${{ steps.tf_outputs.outputs.eks_cluster_arn }}
+
+      - name: Establecer secreto TF_EKS_NODE_GROUP_NAME
+        uses: peter-evans/create-or-update-secret@v2
+        with:
+          secret_name: TF_EKS_NODE_GROUP_NAME
+          secret_value: ${{ steps.tf_outputs.outputs.eks_node_group_name }}
+
+      - name: Establecer secreto TF_STATE_BUCKET
+        uses: peter-evans/create-or-update-secret@v2
+        with:
+          secret_name: TF_STATE_BUCKET
+          secret_value: ${{ steps.tf_outputs.outputs.terraform_state_bucket }}
+
+      - name: Establecer secreto TF_LOCKS_TABLE
+        uses: peter-evans/create-or-update-secret@v2
+        with:
+          secret_name: TF_LOCKS_TABLE
+          secret_value: ${{ steps.tf_outputs.outputs.terraform_locks_table }}
+
+      - name: Establecer secreto TF_ALB_DNS_NAME
+        uses: peter-evans/create-or-update-secret@v2
+        with:
+          secret_name: TF_ALB_DNS_NAME
+          secret_value: ${{ steps.tf_outputs.outputs.alb_dns_name }}
+
+      - name: Establecer secreto TF_ALB_ARN
+        uses: peter-evans/create-or-update-secret@v2
+        with:
+          secret_name: TF_ALB_ARN
+          secret_value: ${{ steps.tf_outputs.outputs.alb_arn }}
+
       # Dorme durante 300 segundos para permitir que los cambios se apliquen
       - name: dormir
         run: sleep 300s

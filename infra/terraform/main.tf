@@ -228,7 +228,7 @@ resource "aws_iam_role_policy_attachment" "eks_node_AmazonEC2ContainerRegistryRe
 
 resource "aws_eks_cluster" "calculadora" {
   name     = "calculadora-eks-${data.aws_caller_identity.current.account_id}"
-  version  = "1.35.4"
+  version  = "1.35"
   role_arn = aws_iam_role.eks_cluster_role.arn
 
   vpc_config {
@@ -263,7 +263,7 @@ resource "aws_eks_node_group" "calculadora_nodes" {
   }
 
   instance_types = ["t3.medium"]
-  ami_type       = "AL2_x86_64"
+  ami_type       = "AL2023_x86_64_STANDARD"
   disk_size      = 20
 
   remote_access {
